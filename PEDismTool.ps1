@@ -163,4 +163,124 @@ function Initialize-Application {
     }
     catch {
         Write-Log "DISM tool not found or not accessible" -Level ERROR
-        [System.Windows.MessageBox]::Show("DISM tool not foun
+        [System.Windows.MessageBox]::Show("DISM tool not found or not accessible. Please ensure DISM is installed and accessible.", "DISM Not Found", 
+            [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+        $window.Close()
+        exit
+    }
+    
+    # Populate UI elements
+    PopulateIndexComboBox
+    
+    # Add event handlers
+    $window.FindName('btnBrowseWim').Add_Click({ BrowseForWimFile })
+    $window.FindName('btnBrowseMount').Add_Click({ BrowseForMountDirectory })
+    $window.FindName('btnMount').Add_Click({ MountWim })
+    $window.FindName('btnUnmount').Add_Click({ UnmountWim })
+    $window.FindName('txtWimFile').Add_TextChanged({ PopulateIndexComboBox })
+    
+    # Check if WIM is already mounted
+    CheckMountStatus
+}
+
+function PopulateIndexComboBox {
+    $cmbIndex = $window.FindName('cmbIndex')
+    $cmbIndex.Items.Clear()
+    
+    $wimFile = $window.FindName('txtWimFile').Text
+    if (Test-Path $wimFile) {
+        $indexes = & dism /Get-WimInfo /WimFile:$wimFile | Select-String "Index : " | ForEach-Object { $_.ToString().Trim().Split(':')[1].Trim() }
+        foreach ($index in $indexes) {
+            $cmbIndex.Items.Add($index)
+        }
+        $cmbIndex.SelectedIndex = 0
+    }
+}
+
+function BrowseForWimFile {
+    $openFileDialog = New-Object System.Windows.Forms.OpenFileDialog
+    $openFileDialog.Filter = "WIM files (*.wim)|*.wim"
+    if ($openFileDialog.ShowDialog() -eq 'OK') {
+        $window.FindName('txtWimFile').Text = $openFileDialog.FileName
+        PopulateIndexComboBox
+    }
+}
+
+function BrowseForMountDirectory {
+    $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+    if ($folderBrowser.ShowDialog() -eq 'OK') {
+        $window.FindName('txtMountDir').Text = $folderBrowser.SelectedPath
+    }
+}
+
+function MountWim {
+    $wimFile = $window.FindName('txtWimFile').Text
+    $mountDir = $window.FindName('txtMountDir').Text
+    $index = $window.FindName('cmbIndex').SelectedItem
+    
+    if (-not (Test-Path $wimFile)) {
+        Write-Log "WIM file not found: $wimFile" -Level ERROR
+        return
+    }
+    
+    if (-not (Test-Path $mountDir)) {
+        New-Item -Path $mountDir -ItemType Directory -Force | Out-Null
+    }
+    
+    try {
+        Write-Log "Mounting WIM file: $wimFile"
+        & dism /Mount-Wim /WimFile:$wimFile /Index:$index /MountDir:$mountDir
+        Write-Log "WIM file mounted successfully" -Level INFO
+        CheckMountStatus
+    }
+    catch {
+        Write-Log "Failed to mount WIM file: $_" -Level ERROR
+    }
+}
+
+function UnmountWim {
+    $mountDir = $window.FindName('txtMountDir').Text
+    
+    if (-not (Test-Path $mountDir)) {
+        Write-Log "Mount directory not found: $mountDir" -Level ERROR
+        return
+    }
+    
+    try {
+        Write-Log "Unmounting WIM file"
+        & dism /Unmount-Wim /MountDir:$mountDir /Commit
+        Write-Log "WIM file unmounted successfully" -Level INFO
+        CheckMountStatus
+    }
+    catch {
+        Write-Log "Failed to unmount WIM file: $_" -Level ERROR
+    }
+}
+
+function CheckMountStatus {
+    $mountDir = $window.FindName('txtMountDir').Text
+    $isMounted = & dism /Get-MountedWimInfo | Select-String $mountDir
+    
+    $btnMount = $window.FindName('btnMount')
+    $btnUnmount = $window.FindName('btnUnmount')
+    
+    if ($isMounted) {
+        $btnMount.IsEnabled = $false
+        $btnUnmount.IsEnabled = $true
+        Write-Log "WIM is currently mounted" -Level INFO
+    }
+    else {
+        $btnMount.IsEnabled = $true
+        $btnUnmount.IsEnabled = $false
+        Write-Log "No WIM is currently mounted" -Level INFO
+    }
+}
+
+# Initialize the application
+Initialize-Application
+
+# Show the window
+$window.ShowDialog() | Out-Null
+
+# Proper disposal
+$window.Close()
