@@ -259,7 +259,7 @@ function UnmountWim {
 function CheckMountStatus {
     $mountDir = $window.FindName('txtMountDir').Text
     $escapedMountDir = [regex]::Escape($mountDir)
-    $isMounted = & dism /Get-MountedWimInfo | Select-String $escapedMountDir
+    $isMounted = & dism /Get-MountedWimInfo | Select-String -Pattern $escapedMountDir
     
     $btnMount = $window.FindName('btnMount')
     $btnUnmount = $window.FindName('btnUnmount')
