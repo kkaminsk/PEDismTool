@@ -259,24 +259,36 @@ function UnmountWim {
 function CheckMountStatus {
     $mountDir = $window.FindName('txtMountDir').Text
     $escapedMountDir = [regex]::Escape($mountDir)
-    $mountInfo = & dism /Get-MountedWimInfo | Select-String $escapedMountDir -Context 0,3
+    $mountInfo = & dism /Get-MountedWimInfo | Out-String
     
     $btnMount = $window.FindName('btnMount')
     $btnUnmount = $window.FindName('btnUnmount')
     
-    if ($mountInfo) {
-        $status = $mountInfo.Context.PostContext | Select-String "Status : " | ForEach-Object { $_.ToString().Trim().Split(':')[1].Trim() }
+    if ($mountInfo -match $escapedMountDir) {
+        $statusMatch = $mountInfo -match "Status\s*:\s*(\w+)"
+        $status = if ($statusMatch) { $matches[1] } else { "Unknown" }
+        
+        Write-Log "Full DISM output:`n$mountInfo" -Level INFO
+        Write-Log "Extracted Status: $status" -Level INFO
         
         $btnMount.IsEnabled = $false
         $btnUnmount.IsEnabled = $true
         
-        if ($status -eq "Ok") {
-            Write-Log "WIM is currently mounted at $mountDir with status: $status" -Level INFO
-        } elseif ($status -eq "Invalid" -or $status -eq "Error") {
-            Write-Log "WIM is mounted at $mountDir but has an invalid or error status: $status" -Level WARNING
-            HandleInvalidMountStatus $mountDir
-        } else {
-            Write-Log "WIM is mounted at $mountDir with status: $status" -Level WARNING
+        switch ($status) {
+            "Ok" {
+                Write-Log "WIM is currently mounted at $mountDir with status: $status" -Level INFO
+            }
+            "Invalid" {
+                Write-Log "WIM is mounted at $mountDir but has an invalid status: $status" -Level WARNING
+                HandleInvalidMountStatus $mountDir
+            }
+            "Error" {
+                Write-Log "WIM is mounted at $mountDir but has an error status: $status" -Level ERROR
+                HandleInvalidMountStatus $mountDir
+            }
+            default {
+                Write-Log "WIM is mounted at $mountDir with an unexpected status: $status" -Level WARNING
+            }
         }
     }
     else {
