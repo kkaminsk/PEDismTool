@@ -212,6 +212,32 @@ function BrowseForMountDirectory {
     }
 }
 
+function ShowProgressAnimation {
+    param (
+        [ScriptBlock]$Action
+    )
+    
+    $progressBar = $window.FindName('progressBar')
+    $animationTimer = New-Object System.Windows.Threading.DispatcherTimer
+    $animationTimer.Interval = [TimeSpan]::FromMilliseconds(100)
+    
+    $progress = 0
+    $animationTimer.Add_Tick({
+        $progress = ($progress + 10) % 100
+        $progressBar.Value = $progress
+    })
+    
+    $animationTimer.Start()
+    
+    try {
+        & $Action
+    }
+    finally {
+        $animationTimer.Stop()
+        $progressBar.Value = 0
+    }
+}
+
 function MountWim {
     $wimFile = $window.FindName('txtWimFile').Text
     $mountDir = $window.FindName('txtMountDir').Text
@@ -228,7 +254,9 @@ function MountWim {
     
     try {
         Write-Log "Mounting WIM file: $wimFile"
-        & dism /Mount-Wim /WimFile:$wimFile /Index:$index /MountDir:$mountDir
+        ShowProgressAnimation -Action {
+            & dism /Mount-Wim /WimFile:$wimFile /Index:$index /MountDir:$mountDir
+        }
         Write-Log "WIM file mounted successfully" -Level INFO
         CheckMountStatus
     }
@@ -247,7 +275,9 @@ function UnmountWim {
     
     try {
         Write-Log "Unmounting WIM file"
-        & dism /Unmount-Wim /MountDir:$mountDir /Commit
+        ShowProgressAnimation -Action {
+            & dism /Unmount-Wim /MountDir:$mountDir /Commit
+        }
         Write-Log "WIM file unmounted successfully" -Level INFO
         CheckMountStatus
     }
