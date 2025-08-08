@@ -258,7 +258,8 @@ function UnmountWim {
 
 function CheckMountStatus {
     $mountDir = $window.FindName('txtMountDir').Text
-    $isMounted = & dism /Get-MountedWimInfo | Select-String $mountDir
+    $escapedMountDir = [regex]::Escape($mountDir)
+    $isMounted = & dism /Get-MountedWimInfo | Select-String $escapedMountDir
     
     $btnMount = $window.FindName('btnMount')
     $btnUnmount = $window.FindName('btnUnmount')
@@ -266,12 +267,12 @@ function CheckMountStatus {
     if ($isMounted) {
         $btnMount.IsEnabled = $false
         $btnUnmount.IsEnabled = $true
-        Write-Log "WIM is currently mounted" -Level INFO
+        Write-Log "WIM is currently mounted at $mountDir" -Level INFO
     }
     else {
         $btnMount.IsEnabled = $true
         $btnUnmount.IsEnabled = $false
-        Write-Log "No WIM is currently mounted" -Level INFO
+        Write-Log "No WIM is currently mounted at $mountDir" -Level INFO
     }
 }
 
