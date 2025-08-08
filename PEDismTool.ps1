@@ -1,8 +1,7 @@
 # PE DISM Tool Implementation
 
-I'll create a complete PowerShell-based application with WPF for the GUI according to your specification. Here's the full implementation:
+# PowerShell-based application with WPF for the GUI
 
-```powershell
 #Requires -Version 5.1
 #Requires -RunAsAdministrator
 
