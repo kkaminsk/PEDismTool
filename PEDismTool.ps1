@@ -259,21 +259,75 @@ function UnmountWim {
 function CheckMountStatus {
     $mountDir = $window.FindName('txtMountDir').Text
     $escapedMountDir = [regex]::Escape($mountDir)
-    $isMounted = & dism /Get-MountedWimInfo | Select-String -Pattern $escapedMountDir
+    $mountInfo = & dism /Get-MountedWimInfo | Select-String $escapedMountDir -Context 0,3
     
     $btnMount = $window.FindName('btnMount')
     $btnUnmount = $window.FindName('btnUnmount')
     
-    if ($isMounted) {
+    if ($mountInfo) {
+        $status = $mountInfo.Context.PostContext | Select-String "Status : " | ForEach-Object { $_.ToString().Trim().Split(':')[1].Trim() }
+        
         $btnMount.IsEnabled = $false
         $btnUnmount.IsEnabled = $true
-        Write-Log "WIM is currently mounted at $mountDir" -Level INFO
+        
+        if ($status -eq "Ok") {
+            Write-Log "WIM is currently mounted at $mountDir with status: $status" -Level INFO
+        } elseif ($status -eq "Invalid" -or $status -eq "Error") {
+            Write-Log "WIM is mounted at $mountDir but has an invalid or error status: $status" -Level WARNING
+            HandleInvalidMountStatus $mountDir
+        } else {
+            Write-Log "WIM is mounted at $mountDir with status: $status" -Level WARNING
+        }
     }
     else {
         $btnMount.IsEnabled = $true
         $btnUnmount.IsEnabled = $false
         Write-Log "No WIM is currently mounted at $mountDir" -Level INFO
     }
+}
+
+function HandleInvalidMountStatus {
+    param (
+        [string]$MountDir
+    )
+    
+    $result = [System.Windows.MessageBox]::Show(
+        "The mounted WIM at $MountDir has an invalid or error status. Would you like to discard changes or attempt to clean up the image?",
+        "Invalid Mount Status",
+        [System.Windows.MessageBoxButton]::YesNoCancel,
+        [System.Windows.MessageBoxImage]::Warning
+    )
+    
+    switch ($result) {
+        'Yes' {
+            # Discard changes
+            try {
+                Write-Log "Attempting to unmount WIM and discard changes" -Level INFO
+                & dism /Unmount-Wim /MountDir:$MountDir /Discard
+                Write-Log "WIM unmounted successfully, changes discarded" -Level INFO
+            }
+            catch {
+                Write-Log "Failed to unmount WIM: $_" -Level ERROR
+            }
+        }
+        'No' {
+            # Cleanup the image
+            try {
+                Write-Log "Attempting to clean up the mounted WIM image" -Level INFO
+                & dism /Cleanup-Wim
+                Write-Log "WIM cleanup completed" -Level INFO
+            }
+            catch {
+                Write-Log "Failed to clean up WIM: $_" -Level ERROR
+            }
+        }
+        'Cancel' {
+            Write-Log "User chose to take no action on the invalid mount status" -Level INFO
+        }
+    }
+    
+    # Recheck mount status after action
+    CheckMountStatus
 }
 
 # Initialize the application
